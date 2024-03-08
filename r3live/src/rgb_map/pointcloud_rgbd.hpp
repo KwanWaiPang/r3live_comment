@@ -60,28 +60,28 @@ Dr. Fu Zhang < fuzhang@hku.hk >.
 extern cv::RNG g_rng;
 
 // extern std::atomic< long > g_pts_index;
-class RGB_pts
+class RGB_pts  //RGB点云类
 {
   public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-#if 0
-    std::atomic<double> m_pos[3];
-    std::atomic<double> m_rgb[3];
-    std::atomic<double> m_cov_rgb[3];
-    std::atomic<double> m_gray;
-    std::atomic<double> m_cov_gray;
-    std::atomic<int> m_N_gray;
-    std::atomic<int> m_N_rgb;
-#else
-    double m_pos[ 3 ] = { 0 };
-    double m_rgb[ 3 ] = { 0 };
+// #if 0
+//     std::atomic<double> m_pos[3];
+//     std::atomic<double> m_rgb[3];
+//     std::atomic<double> m_cov_rgb[3];
+//     std::atomic<double> m_gray;
+//     std::atomic<double> m_cov_gray;
+//     std::atomic<int> m_N_gray;
+//     std::atomic<int> m_N_rgb;
+// #else
+    double m_pos[ 3 ] = { 0 };//位置
+    double m_rgb[ 3 ] = { 0 };//颜色
     double m_cov_rgb[ 3 ] = { 0 };
     double m_gray = 0;
     double m_cov_gray = 0;
     int    m_N_gray = 0;
-    int    m_N_rgb = 0;
+    int    m_N_rgb = 0;//颜色的数量???法向量???
     int    m_pt_index = 0;
-#endif
+// #endif
     vec_2      m_img_vel;
     vec_2      m_img_pt_in_last_frame;
     vec_2      m_img_pt_in_current_frame;
@@ -136,7 +136,7 @@ class RGB_pts
         ar &m_N_gray;
     }
 };
-using RGB_pt_ptr = std::shared_ptr< RGB_pts >;
+using RGB_pt_ptr = std::shared_ptr< RGB_pts >; //一个指向 RGB_pts 类型对象的 std::shared_ptr 智能指针。
 
 class RGB_Voxel
 {
@@ -156,7 +156,7 @@ struct Global_map
     int                                                          m_map_major_version = R3LIVE_MAP_MAJOR_VERSION;
     int                                                          m_map_minor_version = R3LIVE_MAP_MINOR_VERSION;
     int                                                          m_if_get_all_pts_in_boxes_using_mp = 1;
-    std::vector< RGB_pt_ptr >                    m_rgb_pts_vec;
+    std::vector< RGB_pt_ptr >                    m_rgb_pts_vec;//所有的RGB点云对应的指针
     // std::vector< RGB_pt_ptr >                    m_rgb_pts_in_recent_visited_voxels;
     std::shared_ptr< std::vector< RGB_pt_ptr> >                  m_pts_rgb_vec_for_projection = nullptr;
     std::shared_ptr< std::mutex >                                m_mutex_pts_vec;
@@ -165,7 +165,7 @@ struct Global_map
     std::shared_ptr< std::mutex >                                m_mutex_rgb_pts_in_recent_hitted_boxes;
     std::shared_ptr< std::mutex >                                m_mutex_m_box_recent_hitted;
     std::shared_ptr< std::mutex >                                m_mutex_pts_last_visited;
-    Image_frame                                              m_img_for_projection;
+    Image_frame                                                  m_img_for_projection;
     double                                                       m_recent_visited_voxel_activated_time = 0.0;
     bool                                                         m_in_appending_pts = 0;
     int                                                          m_updated_frame_index = 0;
@@ -180,7 +180,7 @@ struct Global_map
     double                                   m_voxel_resolution = 0.1;
     double                                   m_maximum_depth_for_projection = 200;//最大的深度
     double                                   m_minimum_depth_for_projection = 3;//最小的深度
-    int                                      m_last_updated_frame_idx = -1;
+    int                                      m_last_updated_frame_idx = -1;//最后更新的帧索引
     void                                     clear();
     void set_minmum_dis( double minimum_dis );
 

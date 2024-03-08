@@ -6,7 +6,9 @@
     <param name="r3live_common/map_output_dir" type="string" value="$(env HOME)/r3live_output" />
     <rosparam command="load" file="$(find r3live)/../config/r3live_config.yaml" />
 
+    <!-- 前端，进行lidar特征点的提取 -->
     <node pkg="r3live" type="r3live_LiDAR_front_end" name="r3live_LiDAR_front_end"  output="screen" required="true"/>
+    <!-- mapping部分 -->
     <node pkg="r3live" type="r3live_mapping" name="r3live_mapping" output="screen" required="true" />
     
     <arg name="rviz" default="1" />

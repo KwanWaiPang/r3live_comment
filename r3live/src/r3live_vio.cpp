@@ -51,10 +51,10 @@ Dr. Fu Zhang < fuzhang@hku.hk >.
 #include "tools_logger.hpp"
 
 Common_tools::Cost_time_logger              g_cost_time_logger;
-std::shared_ptr< Common_tools::ThreadPool > m_thread_pool_ptr;
+std::shared_ptr< Common_tools::ThreadPool > m_thread_pool_ptr;//线程池
 double                                      g_vio_frame_cost_time = 0;
 double                                      g_lio_frame_cost_time = 0;
-int                                         g_flag_if_first_rec_img = 1;
+int                                         g_flag_if_first_rec_img = 1;//是否是第一帧图像
 #define DEBUG_PHOTOMETRIC 0
 #define USING_CERES 0
 void dump_lio_state_to_log( FILE *fp )
@@ -257,17 +257,21 @@ void R3LIVE::publish_raw_img( cv::Mat &img )
 }
 
 int        sub_image_typed = 0; // 0: TBD 1: sub_raw, 2: sub_comp
-std::mutex mutex_image_callback;
+std::mutex mutex_image_callback;//图像回调的互斥锁
 
 std::deque< sensor_msgs::CompressedImageConstPtr > g_received_compressed_img_msg;
 std::deque< sensor_msgs::ImageConstPtr >           g_received_img_msg;
 std::shared_ptr< std::thread >                     g_thr_process_image;
 
+/*
+* @brief 主要用于处理图像消息的缓冲区。
+*/
 void R3LIVE::service_process_img_buffer()
 {
     while ( 1 )
     {
         // To avoid uncompress so much image buffer, reducing the use of memory.
+        // 首先检查图像缓冲区的大小是否超过了4，如果超过了，则进行处理以避免过多的图像缓冲，从而减少内存的使用。
         if ( m_queue_image_with_pose.size() > 4 )
         {
             while ( m_queue_image_with_pose.size() > 4 )
@@ -279,8 +283,9 @@ void R3LIVE::service_process_img_buffer()
         }
         cv::Mat image_get;
         double  img_rec_time;
-        if ( sub_image_typed == 2 )
-        {
+        if ( sub_image_typed == 2 )//如果是压缩图像
+        { //函数会等待直到接收到了压缩图像消息，
+          // 然后将其解压缩为 OpenCV 的 cv::Mat 格式，同时获取图像接收时间戳，并将消息从队列中移除。
             while ( g_received_compressed_img_msg.size() == 0 )
             {
                 ros::spinOnce();
@@ -305,6 +310,8 @@ void R3LIVE::service_process_img_buffer()
         }
         else
         {
+            // 接收到的是非压缩图像消息。函数会等待直到接收到了非压缩图像消息，
+            // 然后将其转换为 OpenCV 的 cv::Mat 格式，并获取图像接收时间戳，并将消息从队列中移除。
             while ( g_received_img_msg.size() == 0 )
             {
                 ros::spinOnce();
@@ -340,22 +347,32 @@ void R3LIVE::image_comp_callback( const sensor_msgs::CompressedImageConstPtr &ms
 }
 
 // ANCHOR - image_callback
+/*
+ * @brief 回调函数，获取图像数据
+ * @param msg 图像消息
+ */
 void R3LIVE::image_callback( const sensor_msgs::ImageConstPtr &msg )
-{
+{   
+    //函数获取了一个互斥锁 mutex_image_callback 的独占锁 lock，以确保在处理图像消息时不会被其他线程中断。
     std::unique_lock< std::mutex > lock( mutex_image_callback );
+    // 检查一个变量 sub_image_typed 是否等于2。如果等于2，说明已经订阅了压缩图像了
     if ( sub_image_typed == 2 )
     {
         return; // Avoid subscribe the same image twice.
     }
     sub_image_typed = 1;
 
+    // 是否接收到了第一帧图像(但只会运行一次?)
+    // 这段代码用于从 ROS 节点接收图像消息并进行处理，同时避免了过多的图像消息积压，以减少内存的使用。
     if ( g_flag_if_first_rec_img )
     {
         g_flag_if_first_rec_img = 0;
+        // 提交一个任务到线程池 m_thread_pool_ptr 中
         m_thread_pool_ptr->commit_task( &R3LIVE::service_process_img_buffer, this );
     }
 
     cv::Mat temp_img = cv_bridge::toCvCopy( msg, sensor_msgs::image_encodings::BGR8 )->image.clone();//将image mseeage变换成cv mat
+    // 图像调用 process_image 函数进行进一步处理
     process_image( temp_img, msg->header.stamp.toSec() );
 }
 
@@ -365,18 +382,22 @@ int    total_frame_count = 0;
 void   R3LIVE::process_image( cv::Mat &temp_img, double msg_time )//处理图像的函数
 {
     cv::Mat img_get;
+
+    // 检查图像的尺寸是否为0，如果是，则输出错误信息并返回。
     if ( temp_img.rows == 0 )
     {
         cout << "Process image error, image rows =0 " << endl;
         return;
     }
 
+    // 检查图像的时间戳是否小于上一帧图像的时间戳，如果是，则输出错误信息并返回。
     if ( msg_time < last_accept_time )
     {
         cout << "Error, image time revert!!" << endl;
         return;//时间的连续性
     }
 
+    // 进行频率控制，如果两帧图像的时间间隔小于1秒除以图像频率的0.9倍，则返回。
     if ( ( msg_time - last_accept_time ) < ( 1.0 / m_control_image_freq ) * 0.9 )
     {
         return;//频率控制
@@ -392,10 +413,11 @@ void   R3LIVE::process_image( cv::Mat &temp_img, double msg_time )//处理图像
                                       m_camera_ext_t.data(), m_vio_scale_factor );
         cv::eigen2cv( g_cam_K, intrinsic );
         cv::eigen2cv( g_cam_dist, dist_coeffs );
+        // 初始化去失真的参数
         initUndistortRectifyMap( intrinsic, dist_coeffs, cv::Mat(), intrinsic, cv::Size( m_vio_image_width / m_vio_scale_factor, m_vio_image_heigh / m_vio_scale_factor ),
                                  CV_16SC2, m_ud_map1, m_ud_map2 );
         m_thread_pool_ptr->commit_task( &R3LIVE::service_pub_rgb_maps, this);//发布rgb map(分多个topic发布RGB point cloud)
-        m_thread_pool_ptr->commit_task( &R3LIVE::service_VIO_update, this);//更新VIO(vio主函数)
+        m_thread_pool_ptr->commit_task( &R3LIVE::service_VIO_update, this);//更新VIO(vio主函数,在此也会给全局地图m_map_rgb_pts进行赋值)
         m_mvs_recorder.init( g_cam_K, m_vio_image_width / m_vio_scale_factor, &m_map_rgb_pts );
         m_mvs_recorder.set_working_dir( m_map_output_dir );
     }
@@ -957,6 +979,9 @@ bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, s
     return true;
 }
 
+/*
+*@brief:  Publish the 3D points in the current frame.(发布rgb map)
+*/ 
 void R3LIVE::service_pub_rgb_maps()//发布rgb map
 {
     int last_publish_map_idx = -3e8;
@@ -970,20 +995,25 @@ void R3LIVE::service_pub_rgb_maps()//发布rgb map
     {
         ros::spinOnce();
         std::this_thread::sleep_for( std::chrono::milliseconds( 10 ) );//等待10ms
-        pcl::PointCloud< pcl::PointXYZRGB > pc_rgb;
-        sensor_msgs::PointCloud2            ros_pc_msg;
-        int pts_size = m_map_rgb_pts.m_rgb_pts_vec.size();
-        pc_rgb.resize( number_of_pts_per_topic );
+        pcl::PointCloud< pcl::PointXYZRGB > pc_rgb;//rgb点云
+        sensor_msgs::PointCloud2            ros_pc_msg;//点云消息
+        int pts_size = m_map_rgb_pts.m_rgb_pts_vec.size();//有多少个点
+        pc_rgb.resize( number_of_pts_per_topic );//设置点云大小为1000
         // for (int i = pts_size - 1; i > 0; i--)
         int pub_idx_size = 0;
         int cur_topic_idx = 0;
+        
+        //如果上一次发布的地图和当前地图更新的帧idx一样，跳过
         if ( last_publish_map_idx == m_map_rgb_pts.m_last_updated_frame_idx )
         {
             continue;
         }
         last_publish_map_idx = m_map_rgb_pts.m_last_updated_frame_idx;
+
+        // 遍历所有的点
         for ( int i = 0; i < pts_size; i++ )
         {
+            //如果m_N_rgb小于1，跳过
             if ( m_map_rgb_pts.m_rgb_pts_vec[ i ]->m_N_rgb < 1 )
             {
                 continue;

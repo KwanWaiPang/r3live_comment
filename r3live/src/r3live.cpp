@@ -89,13 +89,14 @@ MeasureGroup Measures;
 StatesGroup g_lio_state;
 std::string data_dump_dir = std::string("/mnt/0B3B134F0B3B134F/color_temp_r3live/");
 
-// 。。主函数
+// 。。主函数，额外有一个节点r3live_LiDAR_front_end提取lidar的特征点，其余操作都在此节点运行
 int main(int argc, char **argv)
 {
     printf_program("R3LIVE: A Robust, Real-time, RGB-colored, LiDAR-Inertial-Visual tightly-coupled state Estimation and mapping package");
+    //输出系统的一些软件及版本信息
     Common_tools::printf_software_version();
-    Eigen::initParallel();
-    ros::init(argc, argv, "R3LIVE_main");
+    Eigen::initParallel(); //调用将启动Eigen的并行计算功能，这样在某些操作中，Eigen可以利用多核处理器或多线程来加速计算。这对于处理大型矩阵或进行密集计算的应用程序来说非常有用，可以显著提高计算性能。
+    ros::init(argc, argv, "R3LIVE_main");//初始化ros节点
     R3LIVE * fast_lio_instance = new R3LIVE();
     ros::Rate rate(5000);
     bool status = ros::ok();

@@ -12,6 +12,7 @@ typedef pcl::PointXYZINormal PointType;
 
 ros::Publisher pub_full, pub_surf, pub_corn;
 
+// 定义的lidar类型的枚举
 enum LID_TYPE
 {
     MID,
@@ -89,11 +90,13 @@ int    plane_judge( const pcl::PointCloud< PointType > &pl, vector< orgtype > &t
 bool   small_plane( const pcl::PointCloud< PointType > &pl, vector< orgtype > &types, uint i_cur, uint &i_nex, Eigen::Vector3d &curr_direct );
 bool   edge_jump_judge( const pcl::PointCloud< PointType > &pl, vector< orgtype > &types, uint i, Surround nor_dir );
 
+// 进行lidar前端特征提取
 int main( int argc, char **argv )
 {
     ros::init( argc, argv, "feature_extract" );
     ros::NodeHandle n;
 
+    // 读取参数
     n.param< int >( "Lidar_front_end/lidar_type", lidar_type, 0 );
     n.param< double >( "Lidar_front_end/blind", blind, 0.1 );
     n.param< double >( "Lidar_front_end/inf_bound", inf_bound, 4 );
@@ -121,6 +124,7 @@ int main( int argc, char **argv )
     cos160 = cos( cos160 / 180 * M_PI );
     smallp_intersect = cos( smallp_intersect / 180 * M_PI );
 
+    // 订阅点云数据，根据不同的lidar类型进行不同的处理
     ros::Subscriber sub_points;
 
     switch ( lidar_type )
@@ -151,9 +155,10 @@ int main( int argc, char **argv )
         break;
     }
 
-    pub_full = n.advertise< sensor_msgs::PointCloud2 >( "/laser_cloud", 100 );
-    pub_surf = n.advertise< sensor_msgs::PointCloud2 >( "/laser_cloud_flat", 100 );
-    pub_corn = n.advertise< sensor_msgs::PointCloud2 >( "/laser_cloud_sharp", 100 );
+    // 发布特征点云
+    pub_full = n.advertise< sensor_msgs::PointCloud2 >( "/laser_cloud", 100 );//全部点云
+    pub_surf = n.advertise< sensor_msgs::PointCloud2 >( "/laser_cloud_flat", 100 );//面特征
+    pub_corn = n.advertise< sensor_msgs::PointCloud2 >( "/laser_cloud_sharp", 100 );//点特征
 
     ros::spin();
     return 0;
@@ -183,6 +188,7 @@ void   mid_handler( const sensor_msgs::PointCloud2::ConstPtr &msg )
     // plsize++;
     types[ plsize ].range = sqrt( pl[ plsize ].x * pl[ plsize ].x + pl[ plsize ].y * pl[ plsize ].y );
 
+    // 提取lidar特征点（跳过，后续再细看~）
     give_feature( pl, types, pl_corn, pl_surf );
 
     ros::Time ct( ros::Time::now() );

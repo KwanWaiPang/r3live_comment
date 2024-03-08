@@ -245,7 +245,7 @@ public:
     std::shared_ptr<Image_frame> g_last_image_pose_for_render = nullptr;
     std::list<double> frame_cost_time_vec;
     Rgbmap_tracker op_track;    
-    Global_map m_map_rgb_pts;
+    Global_map m_map_rgb_pts;//全局地图,要发布的彩色点云
     int m_maximum_image_buffer = 2;
     int m_track_windows_size = 50;
     double m_minumum_rgb_pts_size = 0.05;
@@ -329,10 +329,13 @@ public:
         pub_path_cam = m_ros_node_handle.advertise<nav_msgs::Path>("/camera_path", 10);
         std::string LiDAR_pointcloud_topic, IMU_topic, IMAGE_topic, IMAGE_topic_compressed;
 
+        // 获取一系列的参数
         get_ros_parameter<std::string>(m_ros_node_handle, "/LiDAR_pointcloud_topic", LiDAR_pointcloud_topic, std::string("/laser_cloud_flat") );
         get_ros_parameter<std::string>(m_ros_node_handle, "/IMU_topic", IMU_topic, std::string("/livox/imu") );
         get_ros_parameter<std::string>(m_ros_node_handle, "/Image_topic", IMAGE_topic, std::string("/camera/image_color") );
-        IMAGE_topic_compressed = std::string(IMAGE_topic).append("/compressed");
+        IMAGE_topic_compressed = std::string(IMAGE_topic).append("/compressed");//压缩图像的topic
+        
+        // 输出一些订阅的topic
         if(1)
         {
             scope_color(ANSI_COLOR_BLUE_BOLD);
@@ -347,7 +350,7 @@ public:
 
         //订阅者
         sub_imu = m_ros_node_handle.subscribe(IMU_topic.c_str(), 2000000, &R3LIVE::imu_cbk, this, ros::TransportHints().tcpNoDelay());
-        sub_pcl = m_ros_node_handle.subscribe(LiDAR_pointcloud_topic.c_str(), 2000000, &R3LIVE::feat_points_cbk, this, ros::TransportHints().tcpNoDelay());//点云回调
+        sub_pcl = m_ros_node_handle.subscribe(LiDAR_pointcloud_topic.c_str(), 2000000, &R3LIVE::feat_points_cbk, this, ros::TransportHints().tcpNoDelay());//点云回调（获取的是面特征）
         sub_img = m_ros_node_handle.subscribe(IMAGE_topic.c_str(), 1000000, &R3LIVE::image_callback, this, ros::TransportHints().tcpNoDelay());//图像回调（获取m_queue_image_with_pose）
         sub_img_comp = m_ros_node_handle.subscribe(IMAGE_topic_compressed.c_str(), 1000000, &R3LIVE::image_comp_callback, this, ros::TransportHints().tcpNoDelay());
 
@@ -399,12 +402,17 @@ public:
             scope_color( ANSI_COLOR_BLUE );
             load_vio_parameters();//导入VIO的参数
         }
+        // 查看输出路径是否存在,如果存在就创建
         if(!Common_tools::if_file_exist(m_map_output_dir))
         {
             cout << ANSI_COLOR_BLUE_BOLD << "Create r3live output dir: " << m_map_output_dir << ANSI_COLOR_RESET << endl;
             Common_tools::create_dir(m_map_output_dir);
         }
+        // 创建一个线程池
         m_thread_pool_ptr = std::make_shared<Common_tools::ThreadPool>(6, true, false); // At least 5 threads are needs, here we allocate 6 threads.
+        // 第一个参数 6：指定了线程池的大小，即线程的数量为6个。
+        // 第二个参数 true：可能是用来指示线程池在构造时是否立即启动线程的布尔值。如果是true，则表示线程池在构造时即开始运行；如果是false，则表示线程池在构造后需要手动调用启动方法才能开始运行。
+        // 第三个参数 false：可能是用来指示线程池是否采用无界队列的布尔值。如果是true，则表示线程池采用无界队列，任务总是被接受，不会因队列已满而阻塞；如果是false，则表示线程池采用有界队列，当任务队列已满时，新任务将会被拒绝。
         g_cost_time_logger.init_log( std::string(m_map_output_dir).append("/cost_time_logger.log"));
         m_map_rgb_pts.set_minmum_dis(m_minumum_rgb_pts_size);//设置点之间最小的距离，以及将m_hashmap_3d_pts清空一下
         m_map_rgb_pts.m_recent_visited_voxel_activated_time = m_recent_visited_voxel_activated_time;

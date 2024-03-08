@@ -459,6 +459,10 @@ void R3LIVE::lasermap_fov_segment()//foc分割？
     // s_plot6.push_back(omp_get_wtime() - t_begin);
 }
 
+/*
+ * @brief 回调函数，获取激光雷达的特征点,并且放于lidar_buffer中
+ * @param msg_in 激光雷达的特征点(面特征点)
+ */
 void R3LIVE::feat_points_cbk( const sensor_msgs::PointCloud2::ConstPtr &msg_in )
 {
     sensor_msgs::PointCloud2::Ptr msg( new sensor_msgs::PointCloud2( *msg_in ) );
