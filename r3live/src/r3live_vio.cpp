@@ -172,6 +172,9 @@ void R3LIVE::set_initial_state_cov( StatesGroup &state )
     state.cov.block( 25, 25, 4, 4 ) = state.cov.block( 25, 25, 4, 4 ).setIdentity() *  1e-3; // Camera intrinsic.
 }
 
+/*
+* @brief 创建窗口来显示部分调试信息
+*/
 cv::Mat R3LIVE::generate_control_panel_img()
 {
     int     line_y = 40;
@@ -203,6 +206,7 @@ void R3LIVE::set_initial_camera_parameter( StatesGroup &state, double *intrinsic
     g_cam_K << intrinsic_data[ 0 ] / cam_k_scale, intrinsic_data[ 1 ], intrinsic_data[ 2 ] / cam_k_scale, intrinsic_data[ 3 ],
         intrinsic_data[ 4 ] / cam_k_scale, intrinsic_data[ 5 ] / cam_k_scale, intrinsic_data[ 6 ], intrinsic_data[ 7 ], intrinsic_data[ 8 ];
     g_cam_dist = Eigen::Map< Eigen::Matrix< double, 5, 1 > >( camera_dist_data );
+    //初始化相机外参
     state.rot_ext_i2c = Eigen::Map< Eigen::Matrix< double, 3, 3, Eigen::RowMajor > >( imu_camera_ext_R );
     state.pos_ext_i2c = Eigen::Map< Eigen::Matrix< double, 3, 1 > >( imu_camera_ext_t );
     // state.pos_ext_i2c.setZero();
@@ -409,6 +413,7 @@ void   R3LIVE::process_image( cv::Mat &temp_img, double msg_time )//处理图像
         m_camera_start_ros_tim = msg_time;
         m_vio_scale_factor = m_vio_image_width * m_image_downsample_ratio / temp_img.cols; // 320 * 24   //需要的图像size跟实际的图像size
         // load_vio_parameters();
+        // 初始化相机参数，包括了相机-lidar外参
         set_initial_camera_parameter( g_lio_state, m_camera_intrinsic.data(), m_camera_dist_coeffs.data(), m_camera_ext_R.data(),
                                       m_camera_ext_t.data(), m_vio_scale_factor );
         cv::eigen2cv( g_cam_K, intrinsic );
@@ -416,12 +421,14 @@ void   R3LIVE::process_image( cv::Mat &temp_img, double msg_time )//处理图像
         // 初始化去失真的参数
         initUndistortRectifyMap( intrinsic, dist_coeffs, cv::Mat(), intrinsic, cv::Size( m_vio_image_width / m_vio_scale_factor, m_vio_image_heigh / m_vio_scale_factor ),
                                  CV_16SC2, m_ud_map1, m_ud_map2 );
+        //  将 R3LIVE 类中的 service_pub_rgb_maps 方法作为一个任务提交给线程池执行。
         m_thread_pool_ptr->commit_task( &R3LIVE::service_pub_rgb_maps, this);//发布rgb map(分多个topic发布RGB point cloud，每个topic最多1000个点)
         m_thread_pool_ptr->commit_task( &R3LIVE::service_VIO_update, this);//更新VIO(vio主函数,在此也会给全局地图m_map_rgb_pts进行赋值)
         m_mvs_recorder.init( g_cam_K, m_vio_image_width / m_vio_scale_factor, &m_map_rgb_pts );
         m_mvs_recorder.set_working_dir( m_map_output_dir );
     }
 
+    // 根据需求对图像进行缩放
     if ( m_image_downsample_ratio != 1.0 )
     {
         cv::resize( temp_img, img_get, cv::Size( m_vio_image_width / m_vio_scale_factor, m_vio_image_heigh / m_vio_scale_factor ) );//改变图片的尺寸
@@ -430,6 +437,8 @@ void   R3LIVE::process_image( cv::Mat &temp_img, double msg_time )//处理图像
     {
         img_get = temp_img; // clone ?
     }
+
+    // 创建一个 Image_frame 类的智能指针 img_pose，并将其初始化为一个 Image_frame 类的对象。（包含了pose与image）
     std::shared_ptr< Image_frame > img_pose = std::make_shared< Image_frame >( g_cam_K );
     if ( m_if_pub_raw_img )
     {
@@ -439,7 +448,7 @@ void   R3LIVE::process_image( cv::Mat &temp_img, double msg_time )//处理图像
     // cv::imshow("sub Img", img_pose->m_img);
     img_pose->m_timestamp = msg_time;
     img_pose->init_cubic_interpolation();//获取灰度图
-    img_pose->image_equalize();//图像均衡处理
+    img_pose->image_equalize();//图像均衡处理此时，img_pose 中的m_img与 m_img_gray 变为了均衡化后的图像。
     m_camera_data_mutex.lock();
     m_queue_image_with_pose.push_back( img_pose );
     m_camera_data_mutex.unlock();
@@ -461,7 +470,7 @@ void R3LIVE::load_vio_parameters()
     m_ros_node_handle.getParam( "r3live_vio/image_height", m_vio_image_heigh );
     m_ros_node_handle.getParam( "r3live_vio/camera_intrinsic", camera_intrinsic_data );
     m_ros_node_handle.getParam( "r3live_vio/camera_dist_coeffs", camera_dist_coeffs_data );
-    m_ros_node_handle.getParam( "r3live_vio/camera_ext_R", camera_ext_R_data );
+    m_ros_node_handle.getParam( "r3live_vio/camera_ext_R", camera_ext_R_data );//camera-lidar外参
     m_ros_node_handle.getParam( "r3live_vio/camera_ext_t", camera_ext_t_data );
 
     CV_Assert( ( m_vio_image_width != 0 && m_vio_image_heigh != 0 ) );
@@ -491,19 +500,26 @@ void R3LIVE::load_vio_parameters()
     std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
 }
 
+/*
+* @brief 设置图像的pose（设置相机的内参与外参）
+* @param image_pose 图像的pose（要传出的参数）
+* @param state 状态（输入参数lio的状态）
+*/ 
 void R3LIVE::set_image_pose( std::shared_ptr< Image_frame > &image_pose, const StatesGroup &state )
 {
     mat_3_3 rot_mat = state.rot_end;
     vec_3   t_vec = state.pos_end;
-    vec_3   pose_t = rot_mat * state.pos_ext_i2c + t_vec;
+    vec_3   pose_t = rot_mat * state.pos_ext_i2c + t_vec;//应该为T_w2c
     mat_3_3 R_w2c = rot_mat * state.rot_ext_i2c;
 
-    image_pose->set_pose( eigen_q( R_w2c ), pose_t );
+    image_pose->set_pose( eigen_q( R_w2c ), pose_t );//设置图像的pose
+    //设置图像的内参
     image_pose->fx = state.cam_intrinsic( 0 );
     image_pose->fy = state.cam_intrinsic( 1 );
     image_pose->cx = state.cam_intrinsic( 2 );
     image_pose->cy = state.cam_intrinsic( 3 );
 
+    //设置图像的内参矩阵
     image_pose->m_cam_K << image_pose->fx, 0, image_pose->cx, 0, image_pose->fy, image_pose->cy, 0, 0, 1;
     scope_color( ANSI_COLOR_CYAN_BOLD );
     // cout << "Set Image Pose frm [" << image_pose->m_frame_idx << "], pose: " << eigen_q(rot_mat).coeffs().transpose()
@@ -643,7 +659,7 @@ bool      R3LIVE::vio_esikf( StatesGroup &state_in, Rgbmap_tracker &op_track )
     if ( !m_if_estimate_i2c_extrinsic )
     {
         state_iter.pos_ext_i2c = m_inital_pos_ext_i2c;
-        state_iter.rot_ext_i2c = m_inital_rot_ext_i2c;
+        state_iter.rot_ext_i2c = m_inital_rot_ext_i2c;//初始化相机与imu的外参
     }
 
     Eigen::Matrix< double, -1, -1 >                       H_mat;
@@ -794,7 +810,15 @@ bool      R3LIVE::vio_esikf( StatesGroup &state_in, Rgbmap_tracker &op_track )
     state_in = state_iter;
     return true;
 }
-
+/**
+ * @brief 进行光度法的VIO
+ * 
+ * @param state_in 
+ * @param op_track 
+ * @param image 
+ * @return true 
+ * @return false 
+ */
 bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, std::shared_ptr< Image_frame > &image )
 {
     Common_tools::Timer tim;
@@ -1118,6 +1142,10 @@ char R3LIVE::cv_keyboard_callback()
 }
 
 // ANCHOR -  service_VIO_update
+/*
+*@brief:  Service for VIO update. (进行VIO更新)
+* 其中处理的为m_queue_image_with_pose，里面包含了存入的图像数据
+*/
 void R3LIVE::service_VIO_update()
 {
     // Init cv windows for debug
@@ -1125,7 +1153,7 @@ void R3LIVE::service_VIO_update()
     op_track.m_maximum_vio_tracked_pts = m_maximum_vio_tracked_pts;//最大跟踪点数
     m_map_rgb_pts.m_minimum_depth_for_projection = m_tracker_minimum_depth;//最小的深度
     m_map_rgb_pts.m_maximum_depth_for_projection = m_tracker_maximum_depth;//最大的深度
-    cv::imshow( "Control panel", generate_control_panel_img().clone() );
+    // cv::imshow( "Control panel", generate_control_panel_img().clone() );//创建一个控制面板来用于debug（gwp_TODO）
     Common_tools::Timer tim;
     cv::Mat             img_get;
     while ( ros::ok() )
@@ -1146,19 +1174,22 @@ void R3LIVE::service_VIO_update()
             std::this_thread::yield();
             continue;
         }
-        m_camera_data_mutex.lock();
+        m_camera_data_mutex.lock();//上锁
+        //如果存在的buffer大于一定阈值（数据太多了，就直接进行光流跟踪，然后删掉一部分）
         while ( m_queue_image_with_pose.size() > m_maximum_image_buffer )//如果存在的buffer大于一定阈值
         {
             cout << ANSI_COLOR_BLUE_BOLD << "=== Pop image! current queue size = " << m_queue_image_with_pose.size() << " ===" << ANSI_COLOR_RESET
                  << endl;
+            //进行光流跟踪处理
             op_track.track_img( m_queue_image_with_pose.front(), -20 );//进行tracking（//光流跟踪，3D地图点投影后，像素距离大于-20（负值不做剔除）认为无效）
-            m_queue_image_with_pose.pop_front();
+            m_queue_image_with_pose.pop_front();//删除第一个元素
         }
 
+        //开始进行图像数据的处理
         std::shared_ptr< Image_frame > img_pose = m_queue_image_with_pose.front();
         double                             message_time = img_pose->m_timestamp;
-        m_queue_image_with_pose.pop_front();
-        m_camera_data_mutex.unlock();
+        m_queue_image_with_pose.pop_front();//删除第一个元素
+        m_camera_data_mutex.unlock();//解锁
         g_camera_lidar_queue.m_last_visual_time = img_pose->m_timestamp + g_lio_state.td_ext_i2c;//image时间加时间补偿
 
         img_pose->set_frame_idx( g_camera_frame_idx );//记录frame的索引
@@ -1166,8 +1197,8 @@ void R3LIVE::service_VIO_update()
 
         if ( g_camera_frame_idx == 0 )//第一帧图像
         {
-            std::vector< cv::Point2f >                pts_2d_vec;
-            std::vector< std::shared_ptr< RGB_pts > > rgb_pts_vec;
+            std::vector< cv::Point2f >                pts_2d_vec;//2D点
+            std::vector< std::shared_ptr< RGB_pts > > rgb_pts_vec;//rgb点云
             // while ( ( m_map_rgb_pts.is_busy() ) || ( ( m_map_rgb_pts.m_rgb_pts_vec.size() <= 100 ) ) )
             while ( ( ( m_map_rgb_pts.m_rgb_pts_vec.size() <= 100 ) ) )//地图点太少，等待数据累积
             {
@@ -1176,8 +1207,10 @@ void R3LIVE::service_VIO_update()
             }
             //根据IMU的pose，计算相机pose，并设定内参
             set_image_pose( img_pose, g_lio_state ); // For first frame pose, we suppose that the motion is static.
-            //将3D地图点投影到当前帧，记录3D地图点，对应的2D地图点
+            //将3D地图点投影到当前帧，记录3D地图点，对应的2D地图点（这是用于做tracking的吧~）
             m_map_rgb_pts.selection_points_for_projection( img_pose, &rgb_pts_vec, &pts_2d_vec, m_track_windows_size / m_vio_scale_factor );
+            // rgb_pts_vec应该是要获取的3D地图点，pts_2d_vec应该是对应的2D地图点（这些点是用来做tracking的吧~）
+
             op_track.init( img_pose, rgb_pts_vec, pts_2d_vec );//初始化光流
             g_camera_frame_idx++;
             continue;
@@ -1212,7 +1245,7 @@ void R3LIVE::service_VIO_update()
         tim.tic( "Ransac" );
         set_image_pose( img_pose, state_out );
 
-        // ANCHOR -  remove point using PnP.
+        // ANCHOR -  remove point using PnP.（采用ransac以及pnp来去除外点）
         if ( op_track.remove_outlier_using_ransac_pnp( img_pose ) == 0 )
         {
             cout << ANSI_COLOR_RED_BOLD << "****** Remove_outlier_using_ransac_pnp error*****" << ANSI_COLOR_RESET << endl;
@@ -1220,7 +1253,7 @@ void R3LIVE::service_VIO_update()
         g_cost_time_logger.record( tim, "Ransac" );
         tim.tic( "Vio_f2f" );
         bool res_esikf = true, res_photometric = true;
-        wait_render_thread_finish();
+        wait_render_thread_finish();//等待渲染线程完成（m_render_thread）
 
         ///vio_esikf，依据重投影误差，更新优化状态量state_out
         res_esikf = vio_esikf( state_out, op_track );
@@ -1245,6 +1278,7 @@ void R3LIVE::service_VIO_update()
                 // img_pose->m_timestamp);
 
                 //更新activated voxel内点的rgb、到相机距离、时间
+                //获取m_map_rgb_pts
                 m_render_thread = std::make_shared< std::shared_future< void > >( m_thread_pool_ptr->commit_task(
                     render_pts_in_voxels_mp, img_pose, &m_map_rgb_pts.m_voxels_recent_visited, img_pose->m_timestamp ) );
             }

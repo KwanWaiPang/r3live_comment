@@ -78,7 +78,7 @@ void Image_frame::set_pose(const eigen_q &pose_w2c_q, const vec_3 &pose_w2c_t)
 {
     m_pose_w2c_q = pose_w2c_q;
     m_pose_w2c_t = pose_w2c_t;
-    refresh_pose_for_projection();
+    refresh_pose_for_projection();//获取它的逆矩阵，方便计算使用
 }
 
 int Image_frame::set_frame_idx(int frame_idx)
@@ -310,7 +310,7 @@ void Image_frame::image_equalize()
 {
     image_equalize(m_img_gray, 3.0);
     // cv::imshow("before", m_img.clone());
-    m_img = equalize_color_image_Ycrcb(m_img);
+    m_img = equalize_color_image_Ycrcb(m_img);//进行均衡化颜色矫正
     // cv::imshow("After", m_img.clone());
 }
 

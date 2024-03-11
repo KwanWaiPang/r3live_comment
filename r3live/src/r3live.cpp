@@ -84,9 +84,9 @@ Dr. Fu Zhang < fuzhang@hku.hk >.
 #include "tools_timer.hpp"
 #include "tools_openCV_3_to_4.hpp"
 
-Camera_Lidar_queue g_camera_lidar_queue;
+Camera_Lidar_queue g_camera_lidar_queue;//全局的相机和激光雷达的数据队列
 MeasureGroup Measures;
-StatesGroup g_lio_state;
+StatesGroup g_lio_state;//全局的lio状态
 std::string data_dump_dir = std::string("/mnt/0B3B134F0B3B134F/color_temp_r3live/");
 
 // 。。主函数，额外有一个节点r3live_LiDAR_front_end提取lidar的特征点，其余操作都在此节点运行

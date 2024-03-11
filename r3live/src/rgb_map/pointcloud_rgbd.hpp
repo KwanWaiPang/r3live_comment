@@ -141,7 +141,7 @@ using RGB_pt_ptr = std::shared_ptr< RGB_pts >; //一个指向 RGB_pts 类型对�
 class RGB_Voxel
 {
   public:
-    std::vector< RGB_pt_ptr > m_pts_in_grid;
+    std::vector< RGB_pt_ptr > m_pts_in_grid;//体素内的点云（彩色点）
     double                    m_last_visited_time = 0;
     RGB_Voxel() = default;
     ~RGB_Voxel() = default;
@@ -174,7 +174,7 @@ struct Global_map
 
     Hash_map_3d< long, RGB_pt_ptr >   m_hashmap_3d_pts;
     Hash_map_3d< long, std::shared_ptr< RGB_Voxel > > m_hashmap_voxels;
-    std::unordered_set< std::shared_ptr< RGB_Voxel > > m_voxels_recent_visited;
+    std::unordered_set< std::shared_ptr< RGB_Voxel > > m_voxels_recent_visited;//最近访问的体素
     std::vector< std::shared_ptr< RGB_pts > >          m_pts_last_hitted;
     double                                   m_minimum_pts_size = 0.05; // 5cm minimum distance.
     double                                   m_voxel_resolution = 0.1;

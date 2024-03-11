@@ -398,7 +398,8 @@ void Global_map::render_pts_in_voxels(std::shared_ptr<Image_frame> &img_ptr, std
 
 Common_tools::Cost_time_logger cost_time_logger_render("/home/ziv/temp/render_thr.log");
 
-std::atomic<long> render_pts_count ;
+std::atomic<long> render_pts_count ;//这行代码定义了一个原子类型的长整型变量 
+// 用于记录处理的点的数量。原子类型保证了对其进行的操作是原子的，即线程安全的，可以在多线程环境下安全地对其进行读写操作。
 static inline double thread_render_pts_in_voxel(const int & pt_start, const int & pt_end, const std::shared_ptr<Image_frame> & img_ptr,
                                                 const std::vector<RGB_voxel_ptr> * voxels_for_render, const double obs_time)
 {
@@ -408,21 +409,28 @@ static inline double thread_render_pts_in_voxel(const int & pt_start, const int 
     double pt_cam_norm;
     Common_tools::Timer tim;
     tim.tic();
+    // 遍历指定范围内的体素（voxel），然后对每个体素中的点进行处理。
     for (int voxel_idx = pt_start; voxel_idx < pt_end; voxel_idx++)
     {
         // continue;
         RGB_voxel_ptr voxel_ptr = (*voxels_for_render)[ voxel_idx ];
         for ( int pt_idx = 0; pt_idx < voxel_ptr->m_pts_in_grid.size(); pt_idx++ )
-        {
+        {   
+            // 首先获取体素中的一个点 pt_w
             pt_w = voxel_ptr->m_pts_in_grid[pt_idx]->get_pos();
+            // 然后使用图像帧对象 img_ptr 中的方法 project_3d_point_in_this_img 将这个点投影到图像中，得到其在图像上的像素坐标 u 和 v。如果投影失败，则跳过当前点。
             if ( img_ptr->project_3d_point_in_this_img( pt_w, u, v, nullptr, 1.0 ) == false )
             {
                 continue;
             }
+            // 如果投影成功，则计算点到相机的距离 pt_cam_norm，并从图像中获取该像素位置的 RGB 颜色。
             pt_cam_norm = ( pt_w - img_ptr->m_pose_w2c_t ).norm();
             // double gray = img_ptr->get_grey_color(u, v, 0);
             // pts_for_render[i]->update_gray(gray, pt_cam_norm);
-            rgb_color = img_ptr->get_rgb( u, v, 0 );
+            rgb_color = img_ptr->get_rgb( u, v, 0 );//获取图像上的颜色
+
+            // 调用点的 update_rgb 方法，将获取到的 RGB 颜色、点到相机的距离以及观测时间传递给点对象进行更新。如果更新成功，则增加 render_pts_count 的值，表示成功处理了一个点。
+            //根据获取到的颜色信息来更新voxel的rgb信息
             if (  voxel_ptr->m_pts_in_grid[pt_idx]->update_rgb(
                      rgb_color, pt_cam_norm, vec_3( image_obs_cov, image_obs_cov, image_obs_cov ), obs_time ) )
             {
@@ -439,6 +447,7 @@ void render_pts_in_voxels_mp(std::shared_ptr<Image_frame> &img_ptr, std::unorder
 {
     Common_tools::Timer tim;
     g_voxel_for_render.clear();
+    //遍历最近访问的voxel，并且放于g_voxel_for_render中
     for(Voxel_set_iterator it = (*_voxels_for_render).begin(); it != (*_voxels_for_render).end(); it++)
     {
         g_voxel_for_render.push_back(*it);
@@ -448,6 +457,7 @@ void render_pts_in_voxels_mp(std::shared_ptr<Image_frame> &img_ptr, std::unorder
     int numbers_of_voxels = g_voxel_for_render.size();
     g_cost_time_logger.record("Pts_num", numbers_of_voxels);
     render_pts_count= 0 ;
+    //采用多线程进行渲染
     if(USING_OPENCV_TBB)
     {
         cv::parallel_for_(cv::Range(0, numbers_of_voxels), [&](const cv::Range &r)
@@ -499,6 +509,17 @@ void Global_map::render_with_a_image(std::shared_ptr<Image_frame> &img_ptr, int 
     render_pts_in_voxels(img_ptr, pts_for_render);
 }
 
+/**
+ * @brief 
+ * 
+ * @param image_pose 包含了相机的内外参以及数据
+ * @param pc_out_vec 要输出的rgb点云
+ * @param pc_2d_out_vec  要输出的2d点云
+ * @param minimum_dis 默认为5
+ * @param skip_step 默认为1
+ * @param use_all_pts 默认为0
+ * @return * void 
+ */
 void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &image_pose, std::vector<std::shared_ptr<RGB_pts>> *pc_out_vec,
                                                             std::vector<cv::Point2f> *pc_2d_out_vec, double minimum_dis,
                                                             int skip_step,
@@ -506,6 +527,7 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
 {
     Common_tools::Timer tim;
     tim.tic();
+    // 将要输出的都先清空一下~
     if (pc_out_vec != nullptr)
     {
         pc_out_vec->clear();
@@ -528,16 +550,16 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
     // int pts_size = m_rgb_pts_vec.size();
     std::vector<std::shared_ptr<RGB_pts>> pts_for_projection;
     m_mutex_m_box_recent_hitted->lock();
-    std::unordered_set< std::shared_ptr< RGB_Voxel > > boxes_recent_hitted = m_voxels_recent_visited;
+    std::unordered_set< std::shared_ptr< RGB_Voxel > > boxes_recent_hitted = m_voxels_recent_visited;//当前能观测到的voxel
     m_mutex_m_box_recent_hitted->unlock();
     if ( (!use_all_pts) && boxes_recent_hitted.size())
     {
         m_mutex_rgb_pts_in_recent_hitted_boxes->lock();
-        
+        //变量当前所有观测到的voxel
         for(Voxel_set_iterator it = boxes_recent_hitted.begin(); it != boxes_recent_hitted.end(); it++)
         {
             // pts_for_projection.push_back( (*it)->m_pts_in_grid.back() );
-            if ( ( *it )->m_pts_in_grid.size() )
+            if ( ( *it )->m_pts_in_grid.size() )//如果这个voxel里面有点，就把它的最后一个点加入到pts_for_projection
             {
                  pts_for_projection.push_back( (*it)->m_pts_in_grid.back() );
                 // pts_for_projection.push_back( ( *it )->m_pts_in_grid[ 0 ] );
@@ -547,15 +569,17 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
 
         m_mutex_rgb_pts_in_recent_hitted_boxes->unlock();
     }
-    else
+    else//如果没有观测到voxel，或者use_all_pts为真
     {
         pts_for_projection = m_rgb_pts_vec;
     }
     int pts_size = pts_for_projection.size();
+    //遍历这些要用来投影的点
     for (int pt_idx = 0; pt_idx < pts_size; pt_idx += skip_step)
     {
         vec_3 pt = pts_for_projection[pt_idx]->get_pos();
         double depth = (pt - image_pose->m_pose_w2c_t).norm();
+        //如果深度大于最大深度或者小于最小深度，就跳过
         if (depth > m_maximum_depth_for_projection)
         {
             continue;
@@ -564,6 +588,7 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
         {
             continue;
         }
+        //投影到图像上
         bool res = image_pose->project_3d_point_in_this_img(pt, u_f, v_f, nullptr, 1.0);
         if (res == false)
         {

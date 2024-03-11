@@ -111,7 +111,7 @@ const int laserCloudHeight = 48;
 const int laserCloudDepth = 48;
 const int laserCloudNum = laserCloudWidth * laserCloudHeight * laserCloudDepth;
 //estimator inputs and output;
-extern Camera_Lidar_queue g_camera_lidar_queue;
+extern Camera_Lidar_queue g_camera_lidar_queue;//全局的相机和激光雷达的数据队列。作为外部变量
 extern MeasureGroup Measures;
 extern StatesGroup g_lio_state;
 extern std::shared_ptr<ImuProcess> g_imu_process;
@@ -229,17 +229,17 @@ public:
     ros::Publisher m_pub_visual_tracked_3d_pts;
     ros::Publisher m_pub_render_rgb_pts;
     std::vector< std::shared_ptr <ros::Publisher> > m_pub_rgb_render_pointcloud_ptr_vec;//这行代码定义了一个 std::vector，其中存储了指向 ros::Publisher 对象的共享指针。这通常用于在ROS中管理多个发布者对象的集合。
-    std::mutex m_camera_data_mutex;
+    std::mutex m_camera_data_mutex;//相机数据处理时候的互斥锁
     double m_camera_start_ros_tim = -3e8;//一开始定义
     std::deque<sensor_msgs::ImageConstPtr> m_queue_image_msg;
-    std::deque<std::shared_ptr<Image_frame>> m_queue_image_with_pose;
+    std::deque<std::shared_ptr<Image_frame>> m_queue_image_with_pose;//存有图像的数据以及对应的位姿
     std::list<std::shared_ptr<Image_frame>> g_image_vec;
     Eigen::Matrix3d g_cam_K;
     Eigen::Matrix<double, 5, 1> g_cam_dist;
     double m_vio_scale_factor = 1.0;
     cv::Mat m_ud_map1, m_ud_map2;
 
-    int                          g_camera_frame_idx = 0;
+    int                          g_camera_frame_idx = 0;//全局的相机的帧序号
     int                          g_LiDAR_frame_index = 0;
     std::mutex g_mutex_render;
     std::shared_ptr<Image_frame> g_last_image_pose_for_render = nullptr;
@@ -269,7 +269,7 @@ public:
     vec_3  m_inital_pos_ext_i2c;
     Eigen::Matrix<double, 3, 3, Eigen::RowMajor> m_camera_intrinsic;
     Eigen::Matrix<double, 5, 1> m_camera_dist_coeffs;
-    Eigen::Matrix<double, 3, 3, Eigen::RowMajor> m_camera_ext_R;
+    Eigen::Matrix<double, 3, 3, Eigen::RowMajor> m_camera_ext_R;//相机-lidar外参
     Eigen::Matrix<double, 3, 1> m_camera_ext_t;
 
     double m_image_downsample_ratio = 1.0;
@@ -351,7 +351,7 @@ public:
         //订阅者
         sub_imu = m_ros_node_handle.subscribe(IMU_topic.c_str(), 2000000, &R3LIVE::imu_cbk, this, ros::TransportHints().tcpNoDelay());
         sub_pcl = m_ros_node_handle.subscribe(LiDAR_pointcloud_topic.c_str(), 2000000, &R3LIVE::feat_points_cbk, this, ros::TransportHints().tcpNoDelay());//点云回调（获取的是面特征）
-        sub_img = m_ros_node_handle.subscribe(IMAGE_topic.c_str(), 1000000, &R3LIVE::image_callback, this, ros::TransportHints().tcpNoDelay());//图像回调（获取m_queue_image_with_pose）
+        sub_img = m_ros_node_handle.subscribe(IMAGE_topic.c_str(), 1000000, &R3LIVE::image_callback, this, ros::TransportHints().tcpNoDelay());//图像回调，在回调中直接通过多线程进行process_image（获取m_queue_image_with_pose）
         sub_img_comp = m_ros_node_handle.subscribe(IMAGE_topic_compressed.c_str(), 1000000, &R3LIVE::image_comp_callback, this, ros::TransportHints().tcpNoDelay());
 
         m_ros_node_handle.getParam("/initial_pose", m_initial_pose);

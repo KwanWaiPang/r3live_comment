@@ -157,8 +157,8 @@ struct Image_frame
     int m_if_have_set_intrinsic = 0;
     Eigen::Matrix3d m_cam_K;//内参矩阵
     double fx, fy, cx, cy;
-    eigen_q m_pose_w2c_q = eigen_q::Identity();
-    vec_3 m_pose_w2c_t = vec_3(0, 0, 0);
+    eigen_q m_pose_w2c_q = eigen_q::Identity();//camera到world的旋转
+    vec_3 m_pose_w2c_t = vec_3(0, 0, 0);//camera到world的平移
     eigen_q m_pose_c2w_q = eigen_q::Identity();
     vec_3 m_pose_c2w_t = vec_3(0, 0, 0);
     int m_if_have_set_pose = 0;
@@ -171,15 +171,15 @@ struct Image_frame
     mat_3_3 m_pose_w2c_R;
     int m_img_rows = 0;
     int m_img_cols = 0;
-    int m_frame_idx = 0;
+    int m_frame_idx = 0;//当前image的序号
     Eigen::Matrix<double, 2, 1> m_gama_para;
     // double m_downsample_step[MAX_DS_LAY] = {1.0, 0.5, 0.25 };
     // double m_downsample_step[10] = {1.0, 0.5, 0.25, 1.0/8.0, 1.0/16.0, 1.0/32.0, 1.0/64.0, 1.0/128 };
     double m_downsample_step[10] = {1.0, 0.5, 0.25, 1.0/8.0, 1.0/16.0, 1.0/24.0, 1.0/32.0, 1.0/64.0 };
 
     cv::Mat m_img;//去失真后的图
-    cv::Mat m_raw_img;//输入的图像
-    cv::Mat m_img_gray;//见init_cubic_interpolation（）
+    cv::Mat m_raw_img;//输入的图像（原始的图像）
+    cv::Mat m_img_gray;//输入图像的灰度图。然后进行均衡化处理。见init_cubic_interpolation（）与image_equalize
 
     double m_fov_margin = 0.005;
     

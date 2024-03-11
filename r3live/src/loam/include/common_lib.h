@@ -129,12 +129,13 @@ Eigen::Matrix< T, 3, 3 > inverse_right_jacobian_of_rotion_matrix(const Eigen::Ma
     return res_mat_33;
 }
 
+//数据结构，存储lidar和camera信息（好像只是一些基本信息，不是数据内容）
 struct Camera_Lidar_queue
 {
     double m_first_imu_time = -3e88;
     double m_sliding_window_tim = 10000;
     double m_last_imu_time = -3e88;
-    double m_last_visual_time = -3e88;
+    double m_last_visual_time = -3e88;//最新的visual观测的时间=输入图像的时间+td_ext_i2c（（理解应该为相机到imu的时间差，这样获取的才是imu的时间））
     double m_last_lidar_time = -3e88;
     double m_visual_init_time = 3e88;
     double m_lidar_drag_cam_tim = 5.0;
@@ -143,8 +144,8 @@ struct Camera_Lidar_queue
 
     int m_if_acc_mul_G = 0;
 
-    int m_if_have_lidar_data = 0;
-    int m_if_have_camera_data = 0;
+    int m_if_have_lidar_data = 0;//是否有lidar数据
+    int m_if_have_camera_data = 0;//是否有camera数据
     int m_if_lidar_can_start = 1;
     Eigen::Vector3d g_noise_cov_acc;
     Eigen::Vector3d g_noise_cov_gyro;
@@ -320,13 +321,17 @@ public:
     Eigen::Vector3d bias_a;                                  // [12-14] accelerator bias
     Eigen::Vector3d gravity;                                 // [15-17] the estimated gravity acceleration
 
+    //相机到imu的外参
     Eigen::Matrix3d rot_ext_i2c;                             // [18-20] Extrinsic between IMU frame to Camera frame on rotation.
-    Eigen::Vector3d pos_ext_i2c;                             // [21-23] Extrinsic between IMU frame to Camera frame on position.
+    Eigen::Vector3d pos_ext_i2c;                             // [21-23] Extrinsic between IMU frame to Camera frame on position.（右乘，如果是左乘就是相机到imu）
+    // 时间差的delta？
     double          td_ext_i2c_delta;                        // [24]    Extrinsic between IMU frame to Camera frame on position.
+    // 相机的内参
     vec_4           cam_intrinsic;                           // [25-28] Intrinsice of camera [fx, fy, cx, cy]
     Eigen::Matrix<double, DIM_OF_STATES, DIM_OF_STATES> cov; // states covariance
     double last_update_time = 0;
-    double          td_ext_i2c;
+    //时间差
+    double          td_ext_i2c;//时间差（理解应该为相机到imu的时间差，这样获取的才是imu的时间）
     StatesGroup()
     {
         rot_end = Eigen::Matrix3d::Identity();
