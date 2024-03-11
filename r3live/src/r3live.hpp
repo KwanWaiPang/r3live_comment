@@ -228,7 +228,7 @@ public:
     // ANCHOR - camera measurement related.
     ros::Publisher m_pub_visual_tracked_3d_pts;
     ros::Publisher m_pub_render_rgb_pts;
-    std::vector< std::shared_ptr <ros::Publisher> > m_pub_rgb_render_pointcloud_ptr_vec;
+    std::vector< std::shared_ptr <ros::Publisher> > m_pub_rgb_render_pointcloud_ptr_vec;//这行代码定义了一个 std::vector，其中存储了指向 ros::Publisher 对象的共享指针。这通常用于在ROS中管理多个发布者对象的集合。
     std::mutex m_camera_data_mutex;
     double m_camera_start_ros_tim = -3e8;//一开始定义
     std::deque<sensor_msgs::ImageConstPtr> m_queue_image_msg;

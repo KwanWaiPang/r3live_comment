@@ -87,7 +87,7 @@ class RGB_pts  //RGB点云类
     vec_2      m_img_pt_in_current_frame;
     int        m_is_out_lier_count = 0;
     cv::Scalar m_dbg_color;
-    double     m_obs_dis = 0;
+    double     m_obs_dis = 0; //观测距离（相当于intensity？）
     double     m_last_obs_time = 0;
     void       clear()
     {

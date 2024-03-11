@@ -416,7 +416,7 @@ void   R3LIVE::process_image( cv::Mat &temp_img, double msg_time )//处理图像
         // 初始化去失真的参数
         initUndistortRectifyMap( intrinsic, dist_coeffs, cv::Mat(), intrinsic, cv::Size( m_vio_image_width / m_vio_scale_factor, m_vio_image_heigh / m_vio_scale_factor ),
                                  CV_16SC2, m_ud_map1, m_ud_map2 );
-        m_thread_pool_ptr->commit_task( &R3LIVE::service_pub_rgb_maps, this);//发布rgb map(分多个topic发布RGB point cloud)
+        m_thread_pool_ptr->commit_task( &R3LIVE::service_pub_rgb_maps, this);//发布rgb map(分多个topic发布RGB point cloud，每个topic最多1000个点)
         m_thread_pool_ptr->commit_task( &R3LIVE::service_VIO_update, this);//更新VIO(vio主函数,在此也会给全局地图m_map_rgb_pts进行赋值)
         m_mvs_recorder.init( g_cam_K, m_vio_image_width / m_vio_scale_factor, &m_map_rgb_pts );
         m_mvs_recorder.set_working_dir( m_map_output_dir );
@@ -986,12 +986,12 @@ void R3LIVE::service_pub_rgb_maps()//发布rgb map
 {
     int last_publish_map_idx = -3e8;
     int sleep_time_aft_pub = 10;
-    int number_of_pts_per_topic = 1000;//每个topic1000个点
+    int number_of_pts_per_topic = 1000;//每1000个点做相应的操作
     if ( number_of_pts_per_topic < 0 )
     {
         return;
     }
-    while ( 1 )
+    while ( 1 )//实现的操作就是每满1000个点，新增额外发布者，这样就类似submap的形式了？也不会存太多数据
     {
         ros::spinOnce();
         std::this_thread::sleep_for( std::chrono::milliseconds( 10 ) );//等待10ms
@@ -1001,7 +1001,7 @@ void R3LIVE::service_pub_rgb_maps()//发布rgb map
         pc_rgb.resize( number_of_pts_per_topic );//设置点云大小为1000
         // for (int i = pts_size - 1; i > 0; i--)
         int pub_idx_size = 0;
-        int cur_topic_idx = 0;
+        int cur_topic_idx = 0;//当前的topic的索引（通过vector的形式，来索引每1000个发布者）
         
         //如果上一次发布的地图和当前地图更新的帧idx一样，跳过
         if ( last_publish_map_idx == m_map_rgb_pts.m_last_updated_frame_idx )
@@ -1018,6 +1018,7 @@ void R3LIVE::service_pub_rgb_maps()//发布rgb map
             {
                 continue;
             }
+            //设置点云的位置和颜色，从m_rgb_pts_vec中获取
             pc_rgb.points[ pub_idx_size ].x = m_map_rgb_pts.m_rgb_pts_vec[ i ]->m_pos[ 0 ];
             pc_rgb.points[ pub_idx_size ].y = m_map_rgb_pts.m_rgb_pts_vec[ i ]->m_pos[ 1 ];
             pc_rgb.points[ pub_idx_size ].z = m_map_rgb_pts.m_rgb_pts_vec[ i ]->m_pos[ 2 ];
@@ -1026,14 +1027,15 @@ void R3LIVE::service_pub_rgb_maps()//发布rgb map
             pc_rgb.points[ pub_idx_size ].b = m_map_rgb_pts.m_rgb_pts_vec[ i ]->m_rgb[ 0 ];
             // pc_rgb.points[i].intensity = m_map_rgb_pts.m_rgb_pts_vec[i]->m_obs_dis;
             pub_idx_size++;
-            if ( pub_idx_size == number_of_pts_per_topic )
+            if ( pub_idx_size == number_of_pts_per_topic )//如果点云的大小等于1000
             {
-                pub_idx_size = 0;
+                pub_idx_size = 0;//每1000次置0
                 pcl::toROSMsg( pc_rgb, ros_pc_msg );
                 ros_pc_msg.header.frame_id = "world";       
                 ros_pc_msg.header.stamp = ros::Time::now(); 
-                if ( m_pub_rgb_render_pointcloud_ptr_vec[ cur_topic_idx ] == nullptr )
-                {
+                if ( m_pub_rgb_render_pointcloud_ptr_vec[ cur_topic_idx ] == nullptr )//如果当前发布者为空
+                {   
+                    //创建发布者，如果它是空的就创建，不是空的就可以发布了~
                     m_pub_rgb_render_pointcloud_ptr_vec[ cur_topic_idx ] =
                         std::make_shared< ros::Publisher >( m_ros_node_handle.advertise< sensor_msgs::PointCloud2 >(
                             std::string( "/RGB_map_" ).append( std::to_string( cur_topic_idx ) ), 100 ) );
@@ -1041,11 +1043,11 @@ void R3LIVE::service_pub_rgb_maps()//发布rgb map
                 m_pub_rgb_render_pointcloud_ptr_vec[ cur_topic_idx ]->publish( ros_pc_msg );
                 std::this_thread::sleep_for( std::chrono::microseconds( sleep_time_aft_pub ) );
                 ros::spinOnce();
-                cur_topic_idx++;
+                cur_topic_idx++;//当前的topic的索引++
             }
         }
 
-        pc_rgb.resize( pub_idx_size );
+        pc_rgb.resize( pub_idx_size );//发布完了将点置0，如果没有满1000，也发布，只是不新增cur_topic_idx了
         pcl::toROSMsg( pc_rgb, ros_pc_msg );
         ros_pc_msg.header.frame_id = "world";       
         ros_pc_msg.header.stamp = ros::Time::now(); 
@@ -1057,7 +1059,7 @@ void R3LIVE::service_pub_rgb_maps()//发布rgb map
         }
         std::this_thread::sleep_for( std::chrono::microseconds( sleep_time_aft_pub ) );
         ros::spinOnce();
-        m_pub_rgb_render_pointcloud_ptr_vec[ cur_topic_idx ]->publish( ros_pc_msg );
+        m_pub_rgb_render_pointcloud_ptr_vec[ cur_topic_idx ]->publish( ros_pc_msg );//发布彩色点云信息
         cur_topic_idx++;
         if ( cur_topic_idx >= 45 ) // Maximum pointcloud topics = 45.
         {
