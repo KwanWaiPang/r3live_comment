@@ -953,11 +953,11 @@ int R3LIVE::service_LIO_update()//激光里程计更新
             int laserCloudFullResNum = laserCloudFullRes2->points.size();
 
             pcl::PointXYZI temp_point;
-            laserCloudFullResColor->clear();
+            laserCloudFullResColor->clear();//清空
             {
                 for ( int i = 0; i < laserCloudFullResNum; i++ )
                 {
-                    RGBpointBodyToWorld( &laserCloudFullRes2->points[ i ], &temp_point );
+                    RGBpointBodyToWorld( &laserCloudFullRes2->points[ i ], &temp_point );//转换到world frame
                     laserCloudFullResColor->push_back( temp_point );
                 }
                 sensor_msgs::PointCloud2 laserCloudFullRes3;

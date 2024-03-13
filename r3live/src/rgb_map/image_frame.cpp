@@ -67,7 +67,7 @@ void Image_frame::release_image()
     m_img_gray.release();
 }
 
-void Image_frame::refresh_pose_for_projection()
+void Image_frame::refresh_pose_for_projection()//获取它的逆矩阵，方便计算使用(用于投影的？)
 {
     m_pose_c2w_q = m_pose_w2c_q.inverse();
     m_pose_c2w_t = -(m_pose_w2c_q.inverse() * m_pose_w2c_t);

@@ -198,6 +198,7 @@ cv::Mat R3LIVE::generate_control_panel_img()
 void R3LIVE::set_initial_camera_parameter( StatesGroup &state, double *intrinsic_data, double *camera_dist_data, double *imu_camera_ext_R,
                                            double *imu_camera_ext_t, double cam_k_scale )
 {
+    // //输入的是g_lio_state, m_camera_intrinsic.data(), m_camera_dist_coeffs.data(), m_camera_ext_R.data(), m_camera_ext_t.data(), m_vio_scale_factor 
     scope_color( ANSI_COLOR_YELLOW_BOLD );
     // g_cam_K << 863.4241 / cam_k_scale, 0, 625.6808 / cam_k_scale,
     //     0, 863.4171 / cam_k_scale, 518.3392 / cam_k_scale,
@@ -207,14 +208,14 @@ void R3LIVE::set_initial_camera_parameter( StatesGroup &state, double *intrinsic
         intrinsic_data[ 4 ] / cam_k_scale, intrinsic_data[ 5 ] / cam_k_scale, intrinsic_data[ 6 ], intrinsic_data[ 7 ], intrinsic_data[ 8 ];
     g_cam_dist = Eigen::Map< Eigen::Matrix< double, 5, 1 > >( camera_dist_data );
     //初始化相机外参
-    state.rot_ext_i2c = Eigen::Map< Eigen::Matrix< double, 3, 3, Eigen::RowMajor > >( imu_camera_ext_R );
+    state.rot_ext_i2c = Eigen::Map< Eigen::Matrix< double, 3, 3, Eigen::RowMajor > >( imu_camera_ext_R );//其实也是camera-lidar的外参。。。
     state.pos_ext_i2c = Eigen::Map< Eigen::Matrix< double, 3, 1 > >( imu_camera_ext_t );
     // state.pos_ext_i2c.setZero();
 
     // Lidar to camera parameters.
     m_mutex_lio_process.lock();
 
-    m_inital_rot_ext_i2c = state.rot_ext_i2c;
+    m_inital_rot_ext_i2c = state.rot_ext_i2c;//初始化的值，但也是camera-lidar的外参
     m_inital_pos_ext_i2c = state.pos_ext_i2c;
     state.cam_intrinsic( 0 ) = g_cam_K( 0, 0 );
     state.cam_intrinsic( 1 ) = g_cam_K( 1, 1 );
@@ -412,7 +413,7 @@ void   R3LIVE::process_image( cv::Mat &temp_img, double msg_time )//处理图像
     {
         m_camera_start_ros_tim = msg_time;
         m_vio_scale_factor = m_vio_image_width * m_image_downsample_ratio / temp_img.cols; // 320 * 24   //需要的图像size跟实际的图像size
-        // load_vio_parameters();
+        // load_vio_parameters();//改为初始化类的时候就读入了参数
         // 初始化相机参数，包括了相机-lidar外参
         set_initial_camera_parameter( g_lio_state, m_camera_intrinsic.data(), m_camera_dist_coeffs.data(), m_camera_ext_R.data(),
                                       m_camera_ext_t.data(), m_vio_scale_factor );
@@ -507,10 +508,10 @@ void R3LIVE::load_vio_parameters()
 */ 
 void R3LIVE::set_image_pose( std::shared_ptr< Image_frame > &image_pose, const StatesGroup &state )
 {
-    mat_3_3 rot_mat = state.rot_end;
+    mat_3_3 rot_mat = state.rot_end;//imu的pose
     vec_3   t_vec = state.pos_end;
     vec_3   pose_t = rot_mat * state.pos_ext_i2c + t_vec;//应该为T_w2c
-    mat_3_3 R_w2c = rot_mat * state.rot_ext_i2c;
+    mat_3_3 R_w2c = rot_mat * state.rot_ext_i2c;//转换到相机坐标系下
 
     image_pose->set_pose( eigen_q( R_w2c ), pose_t );//设置图像的pose
     //设置图像的内参
@@ -694,7 +695,7 @@ bool      R3LIVE::vio_esikf( StatesGroup &state_in, Rgbmap_tracker &op_track )
     {
 
         // cout << "========== Iter " << iter_count << " =========" << endl;
-        mat_3_3 R_imu = state_iter.rot_end;
+        mat_3_3 R_imu = state_iter.rot_end;//imu坐标系下的pose
         vec_3   t_imu = state_iter.pos_end;
         vec_3   t_c2w = R_imu * state_iter.pos_ext_i2c + t_imu;
         mat_3_3 R_c2w = R_imu * state_iter.rot_ext_i2c; // world to camera frame

@@ -376,8 +376,9 @@ void Global_map::render_pts_in_voxels(std::shared_ptr<Image_frame> &img_ptr, std
     {
 
         vec_3 pt_w = pts_for_render[i]->get_pos();
+        //将3D点投影到图像上
         bool res = img_ptr->project_3d_point_in_this_img(pt_w, u, v, nullptr, 1.0);
-        if (res == false)
+        if (res == false)//如果投影失败，则跳过当前点。
         {
             continue;
         }
@@ -386,7 +387,7 @@ void Global_map::render_pts_in_voxels(std::shared_ptr<Image_frame> &img_ptr, std
         vec_2 gama_bak = img_ptr->m_gama_para;
         img_ptr->m_gama_para = vec_2(1.0, 0.0); // Render using normal value?
         double gray = img_ptr->get_grey_color(u, v, 0);
-        vec_3 rgb_color = img_ptr->get_rgb(u, v, 0);
+        vec_3 rgb_color = img_ptr->get_rgb(u, v, 0);//获取图像上的颜色
         pts_for_render[i]->update_gray(gray, pt_cam.norm());
         pts_for_render[i]->update_rgb(rgb_color, pt_cam.norm(), vec_3(image_obs_cov, image_obs_cov, image_obs_cov), obs_time);
         img_ptr->m_gama_para = gama_bak;

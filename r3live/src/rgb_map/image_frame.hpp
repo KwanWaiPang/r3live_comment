@@ -159,7 +159,7 @@ struct Image_frame
     double fx, fy, cx, cy;
     eigen_q m_pose_w2c_q = eigen_q::Identity();//camera到world的旋转
     vec_3 m_pose_w2c_t = vec_3(0, 0, 0);//camera到world的平移
-    eigen_q m_pose_c2w_q = eigen_q::Identity();
+    eigen_q m_pose_c2w_q = eigen_q::Identity();//将世界坐标系的点投影到相机坐标系，然后获取像素？
     vec_3 m_pose_c2w_t = vec_3(0, 0, 0);
     int m_if_have_set_pose = 0;
     double m_timestamp = 0.0;//当前image的时间

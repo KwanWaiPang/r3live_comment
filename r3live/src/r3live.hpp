@@ -265,7 +265,7 @@ public:
     int m_if_record_mvs = 0;
     cv::Mat intrinsic, dist_coeffs;
 
-    mat_3_3 m_inital_rot_ext_i2c;
+    mat_3_3 m_inital_rot_ext_i2c;//初始化camera-lidar外参
     vec_3  m_inital_pos_ext_i2c;
     Eigen::Matrix<double, 3, 3, Eigen::RowMajor> m_camera_intrinsic;
     Eigen::Matrix<double, 5, 1> m_camera_dist_coeffs;

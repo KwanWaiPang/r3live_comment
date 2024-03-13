@@ -321,7 +321,7 @@ public:
     Eigen::Vector3d bias_a;                                  // [12-14] accelerator bias
     Eigen::Vector3d gravity;                                 // [15-17] the estimated gravity acceleration
 
-    //相机到imu的外参
+    //左乘法就是相机到imu的外参
     Eigen::Matrix3d rot_ext_i2c;                             // [18-20] Extrinsic between IMU frame to Camera frame on rotation.
     Eigen::Vector3d pos_ext_i2c;                             // [21-23] Extrinsic between IMU frame to Camera frame on position.（右乘，如果是左乘就是相机到imu）
     // 时间差的delta？
