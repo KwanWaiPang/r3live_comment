@@ -107,6 +107,7 @@ void RGB_pts::update_gray(const double gray, const double obs_dis)
 const double image_obs_cov = 15;
 const double process_noise_sigma = 0.1;
 
+//根据一定的规则，更新点的颜色信息
 int RGB_pts::update_rgb(const vec_3 &rgb, const double obs_dis, const vec_3 obs_sigma, const double obs_time)
 {
     if (m_obs_dis != 0 && (obs_dis > m_obs_dis * 1.2))
