@@ -1168,7 +1168,7 @@ void R3LIVE::service_VIO_update()
             continue;//那么就是需要等待有lidar数据的时候才运行
         }
 
-        if ( m_queue_image_with_pose.size() == 0 )//图像及pose的数目若为0也是继续等待
+        if ( m_queue_image_with_pose.size() == 0 )//图像及pose(需要lidar计算出pose)的数目若为0也是继续等待
         {
             ros::spinOnce();
             std::this_thread::sleep_for( std::chrono::milliseconds( THREAD_SLEEP_TIM ) );
@@ -1187,7 +1187,7 @@ void R3LIVE::service_VIO_update()
         }
 
         //开始进行图像数据的处理
-        std::shared_ptr< Image_frame > img_pose = m_queue_image_with_pose.front();
+        std::shared_ptr< Image_frame > img_pose = m_queue_image_with_pose.front();//此时的img_pose已经包含了图像，只是不包含pose
         double                             message_time = img_pose->m_timestamp;
         m_queue_image_with_pose.pop_front();//删除第一个元素
         m_camera_data_mutex.unlock();//解锁
@@ -1209,10 +1209,11 @@ void R3LIVE::service_VIO_update()
             //根据IMU的pose，计算相机pose，并设定内参
             set_image_pose( img_pose, g_lio_state ); // For first frame pose, we suppose that the motion is static.
             //将3D地图点投影到当前帧，记录3D地图点，对应的2D地图点（这是用于做tracking的吧~）
+            //要获取的就是rgb_pts_vec与pts_2d_vec
             m_map_rgb_pts.selection_points_for_projection( img_pose, &rgb_pts_vec, &pts_2d_vec, m_track_windows_size / m_vio_scale_factor );
             // rgb_pts_vec应该是要获取的3D地图点，pts_2d_vec应该是对应的2D地图点（这些点是用来做tracking的吧~）
 
-            op_track.init( img_pose, rgb_pts_vec, pts_2d_vec );//初始化光流
+            op_track.init( img_pose, rgb_pts_vec, pts_2d_vec );//初始化光流跟踪
             g_camera_frame_idx++;
             continue;
         }

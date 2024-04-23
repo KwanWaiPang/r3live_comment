@@ -170,16 +170,23 @@ opencv_LKTrackerInvoker::opencv_LKTrackerInvoker(
     minEigThreshold = _minEigThreshold;
 }
 
-inline void calculate_LK_optical_flow(const cv::Range &range, const Mat *prevImg, const Mat *prevDeriv, const Mat *nextImg,
-                                      const Point2f *prevPts, Point2f *nextPts,
-                                      uchar *status, float *err,
+inline void calculate_LK_optical_flow(const cv::Range &range, //这是并行计算的一个区间
+                                      const Mat *prevImg, //上一帧的imagee（图像金字塔的某一层）
+                                      const Mat *prevDeriv, //图像的导数
+                                      const Mat *nextImg,//当前帧，图像金字塔的某一层
+                                      const Point2f *prevPts, //上一帧已存在的点
+                                      Point2f *nextPts,//当前帧的点
+                                      uchar *status, //点的状态
+                                      float *err,//输入为0
                                       Size winSize, TermCriteria criteria,
                                       int level, int maxLevel, int flags, float minEigThreshold)
 {
+    //创建一个窗口
     Point2f halfWin((winSize.width - 1) * 0.5f, (winSize.height - 1) * 0.5f);
-    const Mat &I = *prevImg;
-    const Mat &J = *nextImg;
-    const Mat &derivI = *prevDeriv;
+
+    const Mat &I = *prevImg;//上一帧的图像
+    const Mat &J = *nextImg;//当前帧的图像
+    const Mat &derivI = *prevDeriv;//上一帧的图像的导数
 
     int j, cn = I.channels(), cn2 = cn * 2;
     cv::AutoBuffer<deriv_type> _buf(winSize.area() * (cn + cn2));
@@ -769,11 +776,13 @@ int test_fun(int i, int j)
 
 int LK_optical_flow_kernel::track_image(const cv::Mat &curr_img, const std::vector<cv::Point2f> &last_tracked_pts,
                                         std::vector<cv::Point2f> &curr_tracked_pts,
-                                        std::vector<uchar> &status, int opm_method)
+                                        std::vector<uchar> &status, int opm_method)//默认值opm_method = 3 
 {
     // Common_tools::Timer tim;
     // tim.tic();
     // printf_line;
+    
+    //创建光流金字塔
     m_maxLevel = opencv_buildOpticalFlowPyramid(curr_img, m_curr_img_pyr, m_lk_win_size, m_maxLevel, false);
     calc_image_deriv_Sharr(m_curr_img_pyr, m_curr_img_deriv_I, m_curr_img_deriv_I_buff);//计算图像导数
     if (m_prev_img_pyr.size() == 0 || (m_prev_img_pyr[0].cols == 0)) // The first img（上一帧为0那么就是第一帧）
@@ -784,6 +793,8 @@ int LK_optical_flow_kernel::track_image(const cv::Mat &curr_img, const std::vect
         curr_tracked_pts = last_tracked_pts;
         return 0;
     }//就相当于把当前帧变成上一帧。然后就退出
+
+    //当不是第一帧时，开始进行tracking了～
     curr_tracked_pts = last_tracked_pts;
     status.resize(last_tracked_pts.size());
     for (int i = 0; i < last_tracked_pts.size(); i++)

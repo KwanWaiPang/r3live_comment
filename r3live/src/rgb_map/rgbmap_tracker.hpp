@@ -68,7 +68,7 @@ class Rgbmap_tracker
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     std::vector< cv::Mat >     m_img_vec;
     char                       m_temp_char[ 1024 ];
-    cv::Mat                    m_old_frame, m_old_gray;
+    cv::Mat                    m_old_frame, m_old_gray;//上一帧的图像和灰度图
     cv::Mat                    frame_gray, m_current_frame;
     cv::Mat                    m_current_mask;
     unsigned int               m_frame_idx = 0;
@@ -103,18 +103,21 @@ class Rgbmap_tracker
 
     void update_last_tracking_vector_and_ids()
     {
+        // 清空成员变量
         int idx = 0;
         m_last_tracked_pts.clear();
         m_rgb_pts_ptr_vec_in_last_frame.clear();
         m_colors.clear();
         m_old_ids.clear();
+
+        // 遍历 m_map_rgb_pts_in_last_frame_pos 中的每一对键值对（RGB 点指针和对应的投影位置）：
         for ( auto it = m_map_rgb_pts_in_last_frame_pos.begin(); it != m_map_rgb_pts_in_last_frame_pos.end(); it++ )
         {
-            m_rgb_pts_ptr_vec_in_last_frame.push_back( it->first );
-            m_last_tracked_pts.push_back( it->second );
-            m_colors.push_back( ( ( RGB_pts * ) it->first )->m_dbg_color );
-            m_old_ids.push_back( idx );
-            idx++;
+            m_rgb_pts_ptr_vec_in_last_frame.push_back( it->first );//用于保存上一帧中跟踪的 RGB 点的指针。
+            m_last_tracked_pts.push_back( it->second );//用于保存上一帧中跟踪的 RGB 点的投影位置。
+            m_colors.push_back( ( ( RGB_pts * ) it->first )->m_dbg_color );//用于保存上一帧中跟踪的 RGB 点的颜色。
+            m_old_ids.push_back( idx );//用于保存上一帧中跟踪的 RGB 点的 ID。
+            idx++;//ID 自增。记录ID
         }
     }
 
@@ -125,17 +128,24 @@ class Rgbmap_tracker
         m_map_rgb_pts_in_last_frame_pos.clear();
         for ( unsigned int i = 0; i < rgb_pts_vec.size(); i++ )
         {
+            // 使用 RGB 点的指针作为键，投影位置作为值，用来记录上一帧中每个 RGB 点的位置。
             m_map_rgb_pts_in_last_frame_pos[ ( void * ) rgb_pts_vec[ i ].get() ] = pts_proj_img_vec[ i ];
         }
+        // 更新最后一次跟踪的向量和 ID?
         update_last_tracking_vector_and_ids();
     }
 
     void init( const std::shared_ptr< Image_frame > &img_with_pose, std::vector< std::shared_ptr< RGB_pts > > &rgb_pts_vec, std::vector< cv::Point2f > &pts_proj_img_vec )
     {
+        //设置跟踪的点
         set_track_pts( img_with_pose->m_img, rgb_pts_vec, pts_proj_img_vec );
-        m_current_frame_time = img_with_pose->m_timestamp;
-        m_last_frame_time = m_current_frame_time;
-        std::vector< uchar > status;
+        m_current_frame_time = img_with_pose->m_timestamp;//当前的时间戳
+        m_last_frame_time = m_current_frame_time;//上一帧的时间戳
+        std::vector< uchar > status;//状态
+
+        //用LK光流法跟踪图像
+        //m_last_tracked_pts为set_track_pts中的update_last_tracking_vector_and_ids计算的上一帧RGB点云的投影位置
+        // m_current_tracked_pts应该是当前帧跟踪的点（应该跟m_last_tracked_pts的数目是一样的），status是点对应的状态
         m_lk_optical_flow_kernel->track_image( img_with_pose->m_img_gray, m_last_tracked_pts, m_current_tracked_pts, status );
     }
 

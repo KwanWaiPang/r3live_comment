@@ -515,8 +515,8 @@ void Global_map::render_with_a_image(std::shared_ptr<Image_frame> &img_ptr, int 
  * @brief 
  * 
  * @param image_pose 包含了相机的内外参以及数据
- * @param pc_out_vec 要输出的rgb点云
- * @param pc_2d_out_vec  要输出的2d点云
+ * @param pc_out_vec 要输出的rgb点云（要获取的）
+ * @param pc_2d_out_vec  要输出的2d点云（要获取的）
  * @param minimum_dis 默认为5
  * @param skip_step 默认为1
  * @param use_all_pts 默认为0
@@ -538,6 +538,8 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
     {
         pc_2d_out_vec->clear();
     }
+
+    //定义两个hash的结构，通过hash table来管理进行索引
     Hash_map_2d<int, int> mask_index;
     Hash_map_2d<int, float> mask_depth;
 
@@ -550,14 +552,14 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
     int acc = 0;
     int blk_rej = 0;
     // int pts_size = m_rgb_pts_vec.size();
-    std::vector<std::shared_ptr<RGB_pts>> pts_for_projection;
+    std::vector<std::shared_ptr<RGB_pts>> pts_for_projection;//rgb点
     m_mutex_m_box_recent_hitted->lock();
     std::unordered_set< std::shared_ptr< RGB_Voxel > > boxes_recent_hitted = m_voxels_recent_visited;//当前能观测到的voxel
     m_mutex_m_box_recent_hitted->unlock();
-    if ( (!use_all_pts) && boxes_recent_hitted.size())
+    if ( (!use_all_pts) && boxes_recent_hitted.size())//如果不是用所有的点，且观测到了voxel（因为这里boxes_recent_hitted的size不为0才进入处理）
     {
         m_mutex_rgb_pts_in_recent_hitted_boxes->lock();
-        //变量当前所有观测到的voxel
+        //遍历当前所有观测到的voxel
         for(Voxel_set_iterator it = boxes_recent_hitted.begin(); it != boxes_recent_hitted.end(); it++)
         {
             // pts_for_projection.push_back( (*it)->m_pts_in_grid.back() );
@@ -575,12 +577,14 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
     {
         pts_for_projection = m_rgb_pts_vec;
     }
+    //至此，确定了要用来投影的点pts_for_projection
+
     int pts_size = pts_for_projection.size();
     //遍历这些要用来投影的点
     for (int pt_idx = 0; pt_idx < pts_size; pt_idx += skip_step)
     {
-        vec_3 pt = pts_for_projection[pt_idx]->get_pos();
-        double depth = (pt - image_pose->m_pose_w2c_t).norm();
+        vec_3 pt = pts_for_projection[pt_idx]->get_pos();//获取点的位置
+        double depth = (pt - image_pose->m_pose_w2c_t).norm();//点在世界坐标系的位置-相机的位置，在进行归一化，就得到点到相机的距
         //如果深度大于最大深度或者小于最小深度，就跳过
         if (depth > m_maximum_depth_for_projection)
         {
@@ -590,7 +594,8 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
         {
             continue;
         }
-        //投影到图像上
+
+        //投影到图像上（其中会判断是否越界等等，应该只是相机坐标系到像素坐标系）
         bool res = image_pose->project_3d_point_in_this_img(pt, u_f, v_f, nullptr, 1.0);
         if (res == false)
         {
@@ -598,6 +603,8 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
         }
         u = std::round(u_f / minimum_dis) * minimum_dis; // Why can not work
         v = std::round(v_f / minimum_dis) * minimum_dis;
+
+        //如果mask_depth中不存在这个点，或者原先这个点的深度大于depth深度（就是在它的后面），就更新mask_depth和mask_index
         if ((!mask_depth.if_exist(u, v)) || mask_depth.m_map_2d_hash_map[u][v] > depth)
         {
             acc++;
