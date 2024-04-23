@@ -229,6 +229,7 @@ void Rgbmap_tracker::reject_error_tracking_pts( std::shared_ptr< Image_frame > &
 //     return hist_equalized_image;
 // }
 
+//此处跟VINS-mono很像
 void Rgbmap_tracker::track_img( std::shared_ptr< Image_frame > &img_pose, double dis, int if_use_opencv )//默认if_use_opencv=1
 {
     Common_tools::Timer tim;

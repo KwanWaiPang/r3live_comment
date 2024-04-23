@@ -822,13 +822,16 @@ bool      R3LIVE::vio_esikf( StatesGroup &state_in, Rgbmap_tracker &op_track )
  */
 bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, std::shared_ptr< Image_frame > &image )
 {
-    Common_tools::Timer tim;
+    Common_tools::Timer tim;//用来计算函数执行时间
     tim.tic();
-    StatesGroup state_iter = state_in;
+    StatesGroup state_iter = state_in;//状态
+
+    // 没有开启在线“内参”标定则将相机内参设置为全局变量 g_cam_K 中的值。
     if ( !m_if_estimate_intrinsic )     // When disable the online intrinsic calibration.
     {
         state_iter.cam_intrinsic << g_cam_K( 0, 0 ), g_cam_K( 1, 1 ), g_cam_K( 0, 2 ), g_cam_K( 1, 2 );
     }
+    // 没有开启在线“外参”标定则将相机外参设置为全局变量 m_inital_pos_ext_i2c 和 m_inital_rot_ext_i2c 中的值。
     if ( !m_if_estimate_i2c_extrinsic ) // When disable the online extrinsic calibration.
     {
         state_iter.pos_ext_i2c = m_inital_pos_ext_i2c;
@@ -845,7 +848,7 @@ bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, s
     I_STATE_spa = I_STATE.sparseView();
     double fx, fy, cx, cy, time_td;
 
-    int                   total_pt_size = op_track.m_map_rgb_pts_in_current_frame_pos.size();
+    int                   total_pt_size = op_track.m_map_rgb_pts_in_current_frame_pos.size();//获取当前帧的跟踪的特征点数量（特征点通过查看lidar 点投影的情况来确定）
     std::vector< double > last_reprojection_error_vec( total_pt_size ), current_reprojection_error_vec( total_pt_size );
     if ( total_pt_size < minimum_iteration_pts )
     {
@@ -869,10 +872,11 @@ bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, s
 #endif
     for ( int iter_count = 0; iter_count < 2; iter_count++ )
     {
+        //获取pose，包括了IMU的pose以及c2w
         mat_3_3 R_imu = state_iter.rot_end;
         vec_3   t_imu = state_iter.pos_end;
         vec_3   t_c2w = R_imu * state_iter.pos_ext_i2c + t_imu;
-        mat_3_3 R_c2w = R_imu * state_iter.rot_ext_i2c; // world to camera frame
+        mat_3_3 R_c2w = R_imu * state_iter.rot_ext_i2c; // world to camera frame（此处表达应该是w2c才对）
 
         fx = state_iter.cam_intrinsic( 0 );
         fy = state_iter.cam_intrinsic( 1 );
@@ -880,7 +884,8 @@ bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, s
         cy = state_iter.cam_intrinsic( 3 );
         time_td = state_iter.td_ext_i2c_delta;
 
-        vec_3   t_w2c = -R_c2w.transpose() * t_c2w;
+        //下面的变换是进行从世界坐标系到相机坐标系的
+        vec_3   t_w2c = -R_c2w.transpose() * t_c2w;//（此处表达应该是c2w才对）
         mat_3_3 R_w2c = R_c2w.transpose();
         int     pt_idx = -1;
         acc_photometric_error = 0;
@@ -904,10 +909,10 @@ bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, s
                 continue;
             }
             pt_idx++;
-            pt_3d_w = ( ( RGB_pts * ) it->first )->get_pos();
+            pt_3d_w = ( ( RGB_pts * ) it->first )->get_pos();//彩色点云在世界坐标系下的位置
             pt_img_vel = ( ( RGB_pts * ) it->first )->m_img_vel;
             pt_img_measure = vec_2( it->second.x, it->second.y );
-            pt_3d_cam = R_w2c * pt_3d_w + t_w2c;
+            pt_3d_cam = R_w2c * pt_3d_w + t_w2c;//彩色点云从世界坐标系转换到相机坐标系下的位置
             pt_img_proj = vec_2( fx * pt_3d_cam( 0 ) / pt_3d_cam( 2 ) + cx, fy * pt_3d_cam( 1 ) / pt_3d_cam( 2 ) + cy ) + time_td * pt_img_vel;
 
             vec_3   pt_rgb = ( ( RGB_pts * ) it->first )->get_rgb();
@@ -1257,7 +1262,7 @@ void R3LIVE::service_VIO_update()
         bool res_esikf = true, res_photometric = true;
         wait_render_thread_finish();//等待渲染线程完成（m_render_thread）
 
-        ///vio_esikf，依据重投影误差，更新优化状态量state_out
+        ///vio_esikf，依据重投影误差和（当前仍然是frame-to-frame），更新优化状态量state_out
         res_esikf = vio_esikf( state_out, op_track );
         g_cost_time_logger.record( tim, "Vio_f2f" );
         tim.tic( "Vio_f2m" );
