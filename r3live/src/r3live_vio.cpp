@@ -849,17 +849,19 @@ bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, s
     double fx, fy, cx, cy, time_td;
 
     int                   total_pt_size = op_track.m_map_rgb_pts_in_current_frame_pos.size();//获取当前帧的跟踪的特征点数量（特征点通过查看lidar 点投影的情况来确定）
+
+    //用于记录上一次的重投影误差和当前的重投影误差（实际上存放的是光度误差～）
     std::vector< double > last_reprojection_error_vec( total_pt_size ), current_reprojection_error_vec( total_pt_size );
-    if ( total_pt_size < minimum_iteration_pts )
+    if ( total_pt_size < minimum_iteration_pts )//如果点的数量少于阈值就返回false（定义为10）
     {
         state_in = state_iter;
         return false;
     }
 
     int err_size = 3;
-    H_mat.resize( total_pt_size * err_size, DIM_OF_STATES );
-    meas_vec.resize( total_pt_size * err_size, 1 );
-    R_mat_inv.resize( total_pt_size * err_size, total_pt_size * err_size );
+    H_mat.resize( total_pt_size * err_size, DIM_OF_STATES );//将这个H_mat矩阵的大小设置为（特征点数量*3，状态的维度(定义为29))
+    meas_vec.resize( total_pt_size * err_size, 1 );//将这个meas_vec矩阵的大小设置为（特征点数量*3，1）。应该是用于记录类似均值的东西
+    R_mat_inv.resize( total_pt_size * err_size, total_pt_size * err_size );//R矩阵的逆（好像记录的是RGB协方差矩阵），大小为（特征点数量*3，特征点数量*3）
 
     double last_repro_err = 3e8;
     int    avail_pt_count = 0;
@@ -878,6 +880,7 @@ bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, s
         vec_3   t_c2w = R_imu * state_iter.pos_ext_i2c + t_imu;
         mat_3_3 R_c2w = R_imu * state_iter.rot_ext_i2c; // world to camera frame（此处表达应该是w2c才对）
 
+        //获取相机的内参
         fx = state_iter.cam_intrinsic( 0 );
         fy = state_iter.cam_intrinsic( 1 );
         cx = state_iter.cam_intrinsic( 2 );
@@ -902,6 +905,8 @@ bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, s
         avail_pt_count = 0;
         int iter_layer = 0;
         tim.tic( "Build_cost" );
+
+        //遍历当前帧的特征点
         for ( auto it = op_track.m_map_rgb_pts_in_last_frame_pos.begin(); it != op_track.m_map_rgb_pts_in_last_frame_pos.end(); it++ )
         {
             if ( ( ( RGB_pts * ) it->first )->m_N_rgb < 3 )
@@ -913,27 +918,28 @@ bool R3LIVE::vio_photometric( StatesGroup &state_in, Rgbmap_tracker &op_track, s
             pt_img_vel = ( ( RGB_pts * ) it->first )->m_img_vel;
             pt_img_measure = vec_2( it->second.x, it->second.y );
             pt_3d_cam = R_w2c * pt_3d_w + t_w2c;//彩色点云从世界坐标系转换到相机坐标系下的位置
+            //将其投影到图像平面上
             pt_img_proj = vec_2( fx * pt_3d_cam( 0 ) / pt_3d_cam( 2 ) + cx, fy * pt_3d_cam( 1 ) / pt_3d_cam( 2 ) + cy ) + time_td * pt_img_vel;
 
-            vec_3   pt_rgb = ( ( RGB_pts * ) it->first )->get_rgb();
+            vec_3   pt_rgb = ( ( RGB_pts * ) it->first )->get_rgb();//获取rgb的值
             mat_3_3 pt_rgb_info = mat_3_3::Zero();
-            mat_3_3 pt_rgb_cov = ( ( RGB_pts * ) it->first )->get_rgb_cov();
+            mat_3_3 pt_rgb_cov = ( ( RGB_pts * ) it->first )->get_rgb_cov();//获取rgb的协方差
             for ( int i = 0; i < 3; i++ )
             {
-                pt_rgb_info( i, i ) = 1.0 / pt_rgb_cov( i, i ) ;
-                R_mat_inv( pt_idx * err_size + i, pt_idx * err_size + i ) = pt_rgb_info( i, i );
+                pt_rgb_info( i, i ) = 1.0 / pt_rgb_cov( i, i ) ;//记录rgb协方差的逆
+                R_mat_inv( pt_idx * err_size + i, pt_idx * err_size + i ) = pt_rgb_info( i, i );///获取rgb协方差的逆
                 // R_mat_inv( pt_idx * err_size + i, pt_idx * err_size + i ) =  1.0;
             }
             vec_3  obs_rgb_dx, obs_rgb_dy;
-            vec_3  obs_rgb = image->get_rgb( pt_img_proj( 0 ), pt_img_proj( 1 ), 0, &obs_rgb_dx, &obs_rgb_dy );
-            vec_3  photometric_err_vec = ( obs_rgb - pt_rgb );
-            double huber_loss_scale = get_huber_loss_scale( photometric_err_vec.norm() );
+            vec_3  obs_rgb = image->get_rgb( pt_img_proj( 0 ), pt_img_proj( 1 ), 0, &obs_rgb_dx, &obs_rgb_dy );//观测点的rgb值（上面是点云地图的rgb的值）
+            vec_3  photometric_err_vec = ( obs_rgb - pt_rgb );//获取光度误差
+            double huber_loss_scale = get_huber_loss_scale( photometric_err_vec.norm() );//获取对应的huber_loss
             photometric_err_vec *= huber_loss_scale;
             double photometric_err = photometric_err_vec.transpose() * pt_rgb_info * photometric_err_vec;
 
-            acc_photometric_error += photometric_err;
+            acc_photometric_error += photometric_err;//累积的光度误差
 
-            last_reprojection_error_vec[ pt_idx ] = photometric_err;
+            last_reprojection_error_vec[ pt_idx ] = photometric_err;//记录上一次的光度误差
 
             mat_photometric.setZero();
             mat_photometric.col( 0 ) = obs_rgb_dx;
